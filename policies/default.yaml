@@ -1,0 +1,9 @@
+policy:
+  name: financial-advice
+  version: "1.0.0"
+  allowed_models: ["gpt-4o", "llama3"]
+  checks:
+    - pii
+    - hallucination
+    - tone
+  fail_action: redact
