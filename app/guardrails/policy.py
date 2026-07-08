@@ -23,14 +23,24 @@ class GuardrailEngine:
 
     def assert_task_safe(self, task: Task) -> None:
         """Checks if task is allowed by policy."""
-        # For now, we don't have task-level checks in the yaml, keeping existing logic if needed
-        # or assuming task level is safe if not specified.
-        # But let's check for PII in task description if 'pii' check is enabled.
         policy = self.policy_manager.get_policy().policy
-        
-        if "pii" in policy.checks:
-            if re.search(self.patterns["pii"], task.description):
-                 raise GuardrailViolation("Task contains restricted PII")
+
+        # Enforce allowed_models: if the policy lists allowed models and the
+        # task requests one not on the list, block it. (Previously parsed but
+        # never consulted — now enforced.)
+        requested_model = task.parameters.get("model")
+        if requested_model and policy.allowed_models:
+            if requested_model not in policy.allowed_models:
+                raise GuardrailViolation(
+                    f"Model '{requested_model}' not in allowed_models: {policy.allowed_models}"
+                )
+
+        # Run every enabled check against the task description (not just PII).
+        # Previously only PII was checked here; tone/hallucination were only
+        # checked against tool inputs — a gap the red-team harness surfaced.
+        for check in policy.checks:
+            if check in self.patterns and re.search(self.patterns[check], task.description):
+                raise GuardrailViolation(f"Task blocked by {check} check")
 
 
     def inspect_tool_request(self, task: Task, tool_name: Optional[str], tool_input: Dict) -> Tuple[bool, Optional[str]]:
